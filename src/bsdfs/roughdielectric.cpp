@@ -213,11 +213,14 @@ public:
                                BSDFFlags::BackSide | BSDFFlags::NonSymmetric | extra);
         m_flags = m_components[0] | m_components[1];
 
+        m_attenuation = props.get("attenuation", 0.f);
+
         parameters_changed();
     }
 
     void traverse(TraversalCallback *callback) override {
         callback->put_parameter("eta", m_eta, ParamFlags::Differentiable | ParamFlags::Discontinuous);
+        callback->put_parameter("attenuation", m_attenuation, +ParamFlags::NonDifferentiable);
 
         if (!has_flag(m_flags, BSDFFlags::Anisotropic))
             callback->put_object("alpha",                  m_alpha_u.get(),                ParamFlags::Differentiable | ParamFlags::Discontinuous);
@@ -233,7 +236,7 @@ public:
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
         m_inv_eta = dr::rcp(m_eta);
-        dr::make_opaque(m_eta, m_inv_eta);
+        dr::make_opaque(m_eta, m_inv_eta, m_attenuation);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -351,6 +354,10 @@ public:
 
         bs.pdf *= dr::abs(dwh_dwo);
 
+        // Apply the attenuation factor: (cos_theta_i < 0.f): incoming light inside the object
+        Float attnu = dr::select(active && (cos_theta_i < 0.f), m_attenuation, 0.f);
+        weight *= dr::exp(-attnu * si.t);
+
         return { bs, depolarizer<Spectrum>(weight) & active };
     }
 
@@ -426,6 +433,10 @@ public:
 
             result[eval_t] = value;
         }
+
+        // Apply the attenuation factor: (cos_theta_i < 0.f): incoming light inside the object
+        Float attnu = dr::select(active && (cos_theta_i < 0.f), m_attenuation, 0.f);
+        result *= dr::exp(-attnu * si.t);
 
         return depolarizer<Spectrum>(result);
     }
@@ -599,6 +610,10 @@ public:
         Float dwh_dwo = dr::select(reflect, dr::rcp(4.f * dot_wo_m),
                                    (eta * eta * dot_wo_m) /
                                        dr::square(dot_wi_m + eta * dot_wo_m));
+        
+        // Apply the attenuation factor: (cos_theta_i < 0.f): incoming light inside the object
+        Float attnu = dr::select(active && (cos_theta_i < 0.f), m_attenuation, 0.f);
+        result *= dr::exp(-attnu * si.t);
 
         return { depolarizer<Spectrum>(result),
                  dr::select(active, pdf * dr::abs(dwh_dwo), 0.f) };
@@ -623,6 +638,7 @@ public:
         if (m_specular_transmittance)
             oss << "  specular_transmittance = " << string::indent(m_specular_transmittance) << ", " << std::endl;
 
+        oss << "  attenuation = "            << m_attenuation << ", " << std::endl;
         oss << "  eta = "                    << m_eta << std::endl
             << "]";
         return oss.str();
@@ -636,6 +652,7 @@ private:
     ref<Texture> m_alpha_u, m_alpha_v;
     Float m_eta, m_inv_eta;
     bool m_sample_visible;
+    Float m_attenuation;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(RoughDielectric, BSDF)
