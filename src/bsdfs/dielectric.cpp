@@ -232,10 +232,13 @@ public:
                                BSDFFlags::BackSide | BSDFFlags::NonSymmetric);
 
         m_flags = m_components[0] | m_components[1];
+
+        m_attenuation = props.get("attenuation", 0.f);
     }
 
     void traverse(TraversalCallback *callback) override {
         callback->put_parameter("eta", m_eta, +ParamFlags::NonDifferentiable);
+        callback->put_parameter("attenuation", m_attenuation, +ParamFlags::NonDifferentiable);
         if (m_specular_reflectance)
             callback->put_object("specular_reflectance",   m_specular_reflectance.get(),   +ParamFlags::Differentiable);
         if (m_specular_transmittance)
@@ -366,6 +369,10 @@ public:
             weight[selected_t] *= dr::square(factor);
         }
 
+        // Apply the attenuation factor: (cos_theta_i < 0.f): incoming light inside the object
+        Float attnu = dr::select(active && (cos_theta_i < 0.f), m_attenuation, 0.f);
+        weight *= dr::exp(-attnu * si.t);
+
         return { bs, weight & active };
     }
 
@@ -386,6 +393,7 @@ public:
             oss << "  specular_reflectance = " << string::indent(m_specular_reflectance) << "," << std::endl;
         if (m_specular_transmittance)
             oss << "  specular_transmittance = " << string::indent(m_specular_transmittance) << ", " << std::endl;
+        oss << "  attenuation = "            << m_attenuation << ", " << std::endl;
         oss << "  eta = " << m_eta << "," << std::endl
             << "]";
         return oss.str();
@@ -396,6 +404,7 @@ private:
     ScalarFloat m_eta;
     ref<Texture> m_specular_reflectance;
     ref<Texture> m_specular_transmittance;
+    Float m_attenuation;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(SmoothDielectric, BSDF)
