@@ -87,29 +87,31 @@ public:
         update_camera_transforms();
         m_needs_sample_3 = true;
 
-        double fov = props.get<double>("fov", 180.0);
+        // double fov = props.get<double>("fov", 180.0);
 
-        if (fov < 0.0 || fov > 180.0)
-            Throw(
-                "The horizontal field of view must be in the range [0, 180]!");
-        m_fov     = (ScalarFloat) fov;
-        m_cos_fov = dr::cos(dr::deg_to_rad(m_fov / 2.f));
-        dr::make_opaque(m_fov, m_cos_fov);
+        // if (fov < 0.0 || fov > 180.0)
+        //     Throw(
+        //         "The horizontal field of view must be in the range [0,
+        //         180]!");
+        // m_fov     = (ScalarFloat) fov;
+        // m_cos_fov = dr::cos(dr::deg_to_rad(m_fov / 2.f));
+        // dr::make_opaque(m_fov, m_cos_fov);
     }
 
     void traverse(TraversalCallback *callback) override {
         Base::traverse(callback);
         callback->put_parameter("to_world", *m_to_world.ptr(),
                                 +ParamFlags::NonDifferentiable);
-        callback->put_parameter("fov", m_fov, +ParamFlags::NonDifferentiable);
+        // callback->put_parameter("fov", m_fov,
+        // +ParamFlags::NonDifferentiable);
     }
 
     void parameters_changed(const std::vector<std::string> &keys) override {
         Base::parameters_changed(keys);
         update_camera_transforms();
 
-        m_cos_fov = dr::cos(dr::deg_to_rad(m_fov / 2.f));
-        dr::make_opaque(m_fov, m_cos_fov);
+        // m_cos_fov = dr::cos(dr::deg_to_rad(m_fov / 2.f));
+        // dr::make_opaque(m_fov, m_cos_fov);
     }
 
     void update_camera_transforms() {
@@ -156,14 +158,16 @@ public:
         Point3f near_p = m_sample_to_camera *
                          Point3f(position_sample.x(), position_sample.y(), 0.f);
 
+        // Vector3f sampled_d =
+        //     warp::square_to_uniform_cone(aperture_sample, m_cos_fov);
         Vector3f sampled_d =
-            warp::square_to_uniform_cone(aperture_sample, m_cos_fov);
+            warp::square_to_uniform_hemisphere(aperture_sample);
 
         ray.o    = m_to_world.value() * near_p;
         ray.d    = dr::normalize(m_to_world.value() * sampled_d);
         ray.maxt = m_far_clip - m_near_clip;
 
-        return { ray, wav_weight };
+        return { ray, wav_weight * dr::Pi<ScalarFloat> };
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
@@ -181,8 +185,10 @@ public:
         Point3f near_p = m_sample_to_camera *
                          Point3f(position_sample.x(), position_sample.y(), 0.f);
 
+        // Vector3f sampled_d =
+        //     warp::square_to_uniform_cone(aperture_sample, m_cos_fov);
         Vector3f sampled_d =
-            warp::square_to_uniform_cone(aperture_sample, m_cos_fov);
+            warp::square_to_uniform_hemisphere(aperture_sample);
 
         ray.o    = m_to_world.value() * near_p;
         ray.d    = dr::normalize(m_to_world.value() * sampled_d);
@@ -193,12 +199,12 @@ public:
         ray.d_x = ray.d_y     = ray.d;
         ray.has_differentials = true;
 
-        return { ray, wav_weight };
+        return { ray, wav_weight * dr::Pi<ScalarFloat> };
     }
 
     std::pair<DirectionSample3f, Spectrum>
-    sample_direction_attempt(const Interaction3f &it, const Point2f &sample,
-                     Mask active) const {
+    sample_direction(const Interaction3f &it, const Point2f &sample,
+                     Mask active) const override {
         // Transform the reference point into the local coordinate system
         Transform4f trafo = m_to_world.value();
         Point3f ref_p     = trafo.inverse().transform_affine(it.p);
@@ -216,7 +222,8 @@ public:
 
         // Vector2f p_min = Vector2f(ref_p.x() - offset, ref_p.y() - offset);
         // Vector2f p_max = Vector2f(ref_p.x() + offset, ref_p.y() + offset);
-        // active &= !(p_min.x() >= 1.f || p_min.y() >= 1.f || p_max.x() <= -1.f ||
+        // active &= !(p_min.x() >= 1.f || p_min.y() >= 1.f || p_max.x() <= -1.f
+        // ||
         //             p_max.y() <= -1.f);
         // if (dr::none_or<false>(active))
         //     return { ds, dr::zeros<Spectrum>() };
@@ -231,7 +238,8 @@ public:
 
         // Point3f sample_p = trafo_sample * m_sample_to_camera *
         //                    Point3f(sample.x(), sample.y(), 0.f);
-        Point3f sample_p = m_sample_to_camera * Point3f(sample.x(), sample.y(), 0.f);
+        Point3f sample_p =
+            m_sample_to_camera * Point3f(sample.x(), sample.y(), 0.f);
         // Point3f screen_sample = m_camera_to_sample * sample_p;
         // ds.uv                 = dr::head<2>(screen_sample) * m_resolution;
         ds.uv = sample * m_resolution;
@@ -243,8 +251,10 @@ public:
 
         // Compute importance value
         Float ct = Frame3f::cos_theta(local_d), inv_ct = dr::rcp(ct);
-        Float importance =
-            dr::select(active, m_normalization * inv_ct * inv_ct * inv_ct, 0.f);
+        // Float importance =
+        //     dr::select(active, m_normalization * inv_ct * inv_ct * inv_ct,
+        //     0.f);
+        Float importance = dr::select(active, m_normalization * inv_ct, 0.f);
 
         ds.p    = trafo.transform_affine(sample_p);
         ds.d    = (ds.p - it.p) * inv_dist;
@@ -253,9 +263,11 @@ public:
         // ds.pdf  = dr::select(
         //     active, warp::square_to_uniform_cone_pdf(local_d, m_cos_fov),
         //     Float(0.f));
-        ds.pdf = dr::select(active, Float(1.f), Float(0.f));
+        ds.pdf = importance * dist * dist;
 
-        return { ds, Spectrum(importance * inv_dist * inv_dist) };
+        Spectrum weight = dr::select(active, dr::rcp(ds.pdf), Spectrum(0.f));
+
+        return { ds, weight };
     }
 
     ScalarBoundingBox3f bbox() const override {
