@@ -36,6 +36,11 @@ public:
     Null(const Properties &props) : Base(props) {
         m_components.push_back(BSDFFlags::Null | BSDFFlags::FrontSide | BSDFFlags::BackSide);
         m_flags = m_components.back();
+        m_attenuation = props.get("attenuation", 0.f);
+    }
+
+    void traverse(TraversalCallback *callback) override {
+        callback->put_parameter("attenuation", m_attenuation, +ParamFlags::NonDifferentiable);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -60,7 +65,9 @@ public:
                this is one of the few places where it is safe to directly use a
                scalar (which will broadcast to the identity matrix in polarized
                rendering modes). */
-            result               = 1.f;
+            Float cos_theta_i = Frame3f::cos_theta(si.wi);
+            Float attnu = dr::select(active && (cos_theta_i < 0.f), m_attenuation, 0.f);
+            result               = dr::exp(-attnu * si.t);
         }
 
         return { bs, result };
@@ -88,6 +95,8 @@ public:
     std::string to_string() const override { return "Null[]"; }
 
     MI_DECLARE_CLASS()
+private:
+    Float m_attenuation;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(Null, BSDF)
