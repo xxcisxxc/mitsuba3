@@ -861,6 +861,16 @@ public:
     /// Return the area sensor associated with this shape (if any)
     Sensor *sensor(Mask /*unused*/ = true) { return m_sensor.get(); }
 
+    /// to_world transformation
+    Point3f to_world(const Point3f &p) const {
+        return m_to_world.value().transform_affine(p);
+    }
+
+    /// to_local transformation
+    Point3f to_local(const Point3f &p) const {
+        return m_to_object.value().transform_affine(p);
+    }
+
     /**
      * \brief Returns the number of sub-primitives that make up this shape
      *
@@ -1144,6 +1154,8 @@ MI_CALL_TEMPLATE_BEGIN(Shape)
     DRJIT_CALL_METHOD(differential_motion)
     DRJIT_CALL_METHOD(sample_precomputed_silhouette)
     DRJIT_CALL_METHOD(surface_area)
+    DRJIT_CALL_METHOD(to_world)
+    DRJIT_CALL_METHOD(to_local)
     DRJIT_CALL_GETTER(emitter)
     DRJIT_CALL_GETTER(sensor)
     DRJIT_CALL_GETTER(bsdf)

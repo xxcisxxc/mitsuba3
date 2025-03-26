@@ -173,6 +173,12 @@ template <typename Ptr, typename Cls> void bind_shape_generic(Cls &cls) {
                 return shape->silhouette_sampling_weight();
             },
             D(Shape, silhouette_sampling_weight))
+       .def("to_world", [](Ptr shape, const Point3f &p) {
+            return shape->to_world(p);
+        }, R"doc(Transform from local point to world point)doc")
+       .def("to_local", [](Ptr shape, const Point3f &p) {
+            return shape->to_local(p);
+        }, R"doc(Transform form world point to local point)doc")
        .def("sample_silhouette",
             [](Ptr shape, const Point3f &sample, uint32_t flags, Mask active) {
                 return shape->sample_silhouette(sample, flags, active);

@@ -207,6 +207,7 @@ public:
         } else if (m_channel_count == 5) {
             values[3] = alpha;
             values[4] = weight;
+        } else if (m_channel_count == 1) {
         } else {
             Throw("ImageBlock::put(): non-standard image block configuration! (AOVs?)");
         }
