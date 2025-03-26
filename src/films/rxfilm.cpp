@@ -91,6 +91,9 @@ public:
 
     RXFilm(const Properties &props) : Base(props) {
         m_compensate = props.get<bool>("compensate", false);
+        bool use_filter = props.get<bool>("use_filter", false);
+        if (!use_filter)
+            m_filter = nullptr;
     }
 
     size_t base_channels_count() const override {
