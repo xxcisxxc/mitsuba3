@@ -7025,6 +7025,25 @@ Parameter ``ds``:
 Returns:
     The solid angle density of the sample)doc";
 
+static const char *__doc_mitsuba_Scene_pdf_sensor_direction =
+R"doc(Evaluate the PDF of direct importance sampling
+
+This function evaluates the probability density (per unit solid angle)
+of the sampling technique implemented by the sample_sensor_direct()
+function. The returned probability will always be zero when the
+sensor profile contains a Dirac delta term (e.g. point or
+directional sensors).
+
+Parameter ``ref``:
+    A 3D reference location within the scene, which may influence the
+    sampling process.
+
+Parameter ``ds``:
+    A direction sampling record, which specifies the query location.
+
+Returns:
+    The solid angle density of the sample)doc";
+
 static const char *__doc_mitsuba_Scene_ray_intersect =
 R"doc(Intersect a ray with the shapes comprising the scene and return a
 detailed data structure describing the intersection, if one is found.
@@ -8312,6 +8331,10 @@ static const char *__doc_mitsuba_Shape_shape_type = R"doc(Returns the shape type
 static const char *__doc_mitsuba_Shape_silhouette_discontinuity_types = R"doc(//! @{ \name Silhouette sampling routines and other utilities)doc";
 
 static const char *__doc_mitsuba_Shape_silhouette_sampling_weight = R"doc(Return this shape's sampling weight w.r.t. all shapes in the scene)doc";
+
+static const char *__doc_mitsuba_Shape_to_world = R"doc(Transform a point on the shape from local to world space)doc";
+
+static const char *__doc_mitsuba_Shape_to_local = R"doc(Transform a point on the shape from world to local space)doc";
 
 static const char *__doc_mitsuba_Shape_surface_area =
 R"doc(Return the shape's surface area.

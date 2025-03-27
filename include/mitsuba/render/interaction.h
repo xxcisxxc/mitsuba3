@@ -303,6 +303,12 @@ struct SurfaceInteraction : Interaction<Float_, Spectrum_> {
      */
     EmitterPtr emitter(const Scene *scene, Mask active = true) const;
 
+    /**
+     * Return the sensor associated with the intersection (if any)
+     * \note Defined in scene.h
+     */
+    SensorPtr sensor(const Scene *scene, Mask active = true) const;
+
     /// Is the intersected shape also a sensor?
     Mask is_sensor() const { return shape->is_sensor(); }
 

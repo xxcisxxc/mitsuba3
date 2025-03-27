@@ -120,6 +120,7 @@ struct DirectionSample : public PositionSample<Float_, Spectrum_> {
     using Interaction3f        = typename RenderAliases::Interaction3f;
     using SurfaceInteraction3f = typename RenderAliases::SurfaceInteraction3f;
     using EmitterPtr           = typename RenderAliases::EmitterPtr;
+    using SensorPtr            = typename RenderAliases::SensorPtr;
 
     //! @}
     // =============================================================
@@ -143,6 +144,16 @@ struct DirectionSample : public PositionSample<Float_, Spectrum_> {
       * object.
       */
     EmitterPtr emitter = nullptr;
+
+    /**
+      * \brief Optional: pointer to an associated object
+      *
+      * In some uses of this record, sampling a position also involves choosing
+      * one of several objects (shapes, emitters, ..) on which the position
+      * lies. In that case, the \c object attribute stores a pointer to this
+      * object.
+      */
+    SensorPtr sensor = nullptr;
 
     //! @}
     // =============================================================
@@ -177,6 +188,7 @@ struct DirectionSample : public PositionSample<Float_, Spectrum_> {
         dist = dr::norm(rel);
         d = select(si.is_valid(), rel / dist, -si.wi);
         emitter = si.emitter(scene);
+        sensor = si.sensor(scene);
     }
 
     /// Element-by-element constructor
@@ -184,6 +196,12 @@ struct DirectionSample : public PositionSample<Float_, Spectrum_> {
                     const Float &time, const Float &pdf, const Mask &delta,
                     const Vector3f &d, const Float &dist, const EmitterPtr &emitter)
         : Base(p, n, uv, time, pdf, delta), d(d), dist(dist), emitter(emitter) { }
+    
+        /// Element-by-element constructor
+    DirectionSample(const Point3f &p, const Normal3f &n, const Point2f &uv,
+        const Float &time, const Float &pdf, const Mask &delta,
+        const Vector3f &d, const Float &dist, const EmitterPtr &emitter, const SensorPtr &sensor)
+        : Base(p, n, uv, time, pdf, delta), d(d), dist(dist), emitter(emitter), sensor(sensor) { }
 
     /// Construct from a position sample
     DirectionSample(const Base &base) : Base(base) { }

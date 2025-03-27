@@ -360,6 +360,14 @@ Scene<Float, Spectrum>::pdf_emitter_direction(const Interaction3f &ref,
     return ds.emitter->pdf_direction(ref, ds, active) * emitter_pmf;
 }
 
+MI_VARIANT Float
+Scene<Float, Spectrum>::pdf_sensor_direction(const Interaction3f &ref,
+                                              const DirectionSample3f &ds,
+                                              Mask active) const {
+    MI_MASK_ARGUMENT(active);
+    return ds.sensor->pdf_direction(ref, ds, active);
+}
+
 MI_VARIANT Spectrum Scene<Float, Spectrum>::eval_emitter_direction(
     const Interaction3f &ref, const DirectionSample3f &ds, Mask active) const {
     MI_MASK_ARGUMENT(active);
