@@ -409,6 +409,29 @@ public:
                                 Mask active = true) const;
 
     /**
+     * \brief Evaluate the PDF of direct importance sampling
+     *
+     * This function evaluates the probability density (per unit solid angle)
+     * of the sampling technique implemented by the \ref
+     * sample_sensor_direct() function. The returned probability will always
+     * be zero when the sensor profile contains a Dirac delta term (e.g.
+     * point or directional sensors).
+     *
+     * \param ref
+     *    A 3D reference location within the scene, which may influence the
+     *    sampling process.
+     *
+     * \param ds
+     *    A direction sampling record, which specifies the query location.
+     *
+     * \return
+     *    The solid angle density of the sample
+     */
+     Float pdf_sensor_direction(const Interaction3f &ref,
+        const DirectionSample3f &ds,
+        Mask active = true) const;
+
+    /**
      * \brief Re-evaluate the incident direct radiance of the \ref
      * sample_emitter_direction() method.
      *
@@ -653,6 +676,21 @@ SurfaceInteraction<Float, Spectrum>::emitter(const Scene *scene, Mask active) co
         if (scene && scene->environment())
             emitter = dr::select(is_valid(), emitter, scene->environment() & active);
         return emitter;
+    }
+}
+
+// See interaction.h
+template <typename Float, typename Spectrum>
+typename SurfaceInteraction<Float, Spectrum>::SensorPtr
+SurfaceInteraction<Float, Spectrum>::sensor(const Scene *scene, Mask active) const {
+    if constexpr (!dr::is_jit_v<Float>) {
+        DRJIT_MARK_USED(active);
+        return is_valid() ? shape->sensor() : nullptr;
+    } else {
+        SensorPtr sensor = shape->sensor(active);
+        if (scene)
+            sensor = dr::select(is_valid(), sensor, nullptr);
+        return sensor;
     }
 }
 
