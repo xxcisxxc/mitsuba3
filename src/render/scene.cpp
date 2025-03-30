@@ -93,6 +93,8 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props) {
     update_silhouette_sampling_distribution();
 
     m_shapes_grad_enabled = false;
+
+    m_sensor_pmf = m_sensors.empty() ? 0.f : (1.f / m_sensors.size());
 }
 
 MI_VARIANT
@@ -252,6 +254,31 @@ MI_VARIANT Float Scene<Float, Spectrum>::pdf_emitter(UInt32 index,
         return m_emitter_distr->eval_pmf_normalized(index, active);
 }
 
+MI_VARIANT std::tuple<typename Scene<Float, Spectrum>::UInt32, Float, Float>
+Scene<Float, Spectrum>::sample_sensor(Float index_sample, Mask active) const {
+    MI_MASK_ARGUMENT(active);
+
+    if (unlikely(m_sensors.size() < 2)) {
+        if (m_sensors.size() == 1)
+            return { UInt32(0), 1.f, index_sample };
+        else
+            return { UInt32(-1), 0.f, index_sample };
+    }
+
+    uint32_t sensor_count = (uint32_t) m_sensors.size();
+    ScalarFloat sensor_count_f = (ScalarFloat) sensor_count;
+    Float index_sample_scaled = index_sample * sensor_count_f;
+
+    UInt32 index = dr::minimum(UInt32(index_sample_scaled), sensor_count - 1u);
+
+    return { index, sensor_count_f, index_sample_scaled - Float(index) };
+}
+
+MI_VARIANT Float Scene<Float, Spectrum>::pdf_sensor(UInt32 /* index */,
+                                                      Mask /* active */) const {
+    return m_sensor_pmf;
+}
+
 MI_VARIANT std::tuple<typename Scene<Float, Spectrum>::Ray3f, Spectrum,
                        const typename Scene<Float, Spectrum>::EmitterPtr>
 Scene<Float, Spectrum>::sample_emitter_ray(Float time, Float sample1,
@@ -360,18 +387,80 @@ Scene<Float, Spectrum>::pdf_emitter_direction(const Interaction3f &ref,
     return ds.emitter->pdf_direction(ref, ds, active) * emitter_pmf;
 }
 
+MI_VARIANT std::pair<typename Scene<Float, Spectrum>::DirectionSample3f, Spectrum>
+Scene<Float, Spectrum>::sample_sensor_direction(const Interaction3f &ref, const Point2f &sample_,
+                                                 bool test_visibility, Mask active) const {
+    MI_MASK_ARGUMENT(active);
+
+    Point2f sample(sample_);
+    DirectionSample3f ds;
+    Spectrum spec;
+
+    // Potentially disable inlining of sensor sampling (if there is just a single emitter)
+    bool vcall_inline = true;
+    if constexpr (dr::is_jit_v<Float>)
+         vcall_inline = false;
+
+    size_t sensor_count = m_sensors.size();
+    if (sensor_count > 1 || (sensor_count == 1 && !vcall_inline)) {
+        // Randomly pick an sensor
+        auto [index, sensor_weight, sample_x_re] = sample_sensor(sample.x(), active);
+        sample.x() = sample_x_re;
+
+        // Sample a direction towards the sensor
+        SensorPtr sensor = dr::gather<SensorPtr>(m_sensors_dr, index, active);
+        std::tie(ds, spec) = sensor->sample_direction(ref, sample, active);
+
+        // Account for the discrete probability of sampling this sensor
+        ds.pdf *= pdf_sensor(index, active);
+        spec *= sensor_weight;
+
+        active &= (ds.pdf != 0.f);
+
+        // Mark occluded samples as invalid if requested by the user
+        if (test_visibility && dr::any_or<true>(active)) {
+            Mask occluded = ray_test(ref.spawn_ray_to(ds.p), active);
+            dr::masked(spec, occluded) = 0.f;
+            dr::masked(ds.pdf, occluded) = 0.f;
+        }
+    } else if (likely(sensor_count == 1)) {
+        // Sample a direction towards the (single) sensor
+        std::tie(ds, spec) = m_sensors[0]->sample_direction(ref, sample, active);
+
+        active &= (ds.pdf != 0.f);
+
+        // Mark occluded samples as invalid if requested by the user
+        if (test_visibility && dr::any_or<true>(active)) {
+            Mask occluded = ray_test(ref.spawn_ray_to(ds.p), active);
+            dr::masked(spec, occluded) = 0.f;
+            dr::masked(ds.pdf, occluded) = 0.f;
+        }
+    } else {
+        ds = dr::zeros<DirectionSample3f>();
+        spec = 0.f;
+    }
+
+    return { ds, spec };
+}
+
 MI_VARIANT Float
 Scene<Float, Spectrum>::pdf_sensor_direction(const Interaction3f &ref,
                                               const DirectionSample3f &ds,
                                               Mask active) const {
     MI_MASK_ARGUMENT(active);
-    return ds.sensor->pdf_direction(ref, ds, active);
+    return ds.sensor->pdf_direction(ref, ds, active) * m_sensor_pmf;
 }
 
 MI_VARIANT Spectrum Scene<Float, Spectrum>::eval_emitter_direction(
     const Interaction3f &ref, const DirectionSample3f &ds, Mask active) const {
     MI_MASK_ARGUMENT(active);
     return ds.emitter->eval_direction(ref, ds, active);
+}
+
+MI_VARIANT Spectrum Scene<Float, Spectrum>::eval_sensor_direction(
+    const Interaction3f &ref, const DirectionSample3f &ds, Mask active) const {
+    MI_MASK_ARGUMENT(active);
+    return ds.sensor->eval_direction(ref, ds, active);
 }
 
 MI_VARIANT typename Scene<Float, Spectrum>::SilhouetteSample3f
@@ -537,6 +626,8 @@ MI_VARIANT void Scene<Float, Spectrum>::parameters_changed(const std::vector<std
             break;
         }
     }
+
+    m_sensor_pmf = m_sensors.empty() ? 0.f : (1.f / m_sensors.size());
 }
 
 MI_VARIANT std::string Scene<Float, Spectrum>::to_string() const {

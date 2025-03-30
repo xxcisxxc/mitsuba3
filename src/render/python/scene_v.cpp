@@ -73,15 +73,24 @@ MI_PY_EXPORT(Scene) {
              "sample"_a, "active"_a = true, D(Scene, sample_emitter))
         .def("pdf_emitter", &Scene::pdf_emitter,
              "index"_a, "active"_a = true, D(Scene, pdf_emitter))
+        .def("sample_sensor", &Scene::sample_sensor,
+             "sample"_a, "active"_a = true, D(Scene, sample_sensor))
+        .def("pdf_sensor", &Scene::pdf_sensor,
+             "index"_a, "active"_a = true, D(Scene, pdf_sensor))
         .def("sample_emitter_direction", &Scene::sample_emitter_direction,
              "ref"_a, "sample"_a, "test_visibility"_a = true, "active"_a = true,
              D(Scene, sample_emitter_direction))
+        .def("sample_sensor_direction", &Scene::sample_sensor_direction,
+             "ref"_a, "sample"_a, "test_visibility"_a = true, "active"_a = true,
+             D(Scene, sample_sensor_direction))
         .def("pdf_emitter_direction", &Scene::pdf_emitter_direction,
              "ref"_a, "ds"_a, "active"_a = true, D(Scene, pdf_emitter_direction))
         .def("pdf_sensor_direction", &Scene::pdf_sensor_direction,
              "ref"_a, "ds"_a, "active"_a = true, D(Scene, pdf_sensor_direction))
         .def("eval_emitter_direction", &Scene::eval_emitter_direction,
              "ref"_a, "ds"_a, "active"_a = true, D(Scene, eval_emitter_direction))
+        .def("eval_sensor_direction", &Scene::eval_sensor_direction,
+             "ref"_a, "ds"_a, "active"_a = true, D(Scene, eval_sensor_direction))
         .def("sample_emitter_ray", &Scene::sample_emitter_ray,
              "time"_a, "sample1"_a, "sample2"_a, "sample3"_a, "active"_a,
              D(Scene, sample_emitter_ray))

@@ -303,6 +303,29 @@ public:
     Float pdf_emitter(UInt32 index, Mask active = true) const;
 
     /**
+     * \brief Sample one sensor in the scene and rescale the input sample
+     * for reuse.
+     *
+     * Currently, the sampling scheme implemented by the \ref Scene class is
+     * very simplistic (uniform).
+     *
+     * \param sample
+     *    A uniformly distributed number in [0, 1).
+     *
+     * \return
+     *    The index of the chosen sensor along with the sampling weight (equal
+     *    to the inverse PDF), and the transformed random sample for reuse.
+     */
+    std::tuple<UInt32, Float, Float>
+    sample_sensor(Float index_sample, Mask active = true) const;
+
+    /**
+     * \brief Evaluate the discrete probability of the \ref
+     * sample_sensor() technique for the given a sensor index.
+     */
+    Float pdf_sensor(UInt32 index, Mask active = true) const;
+
+    /**
      * \brief Sample a ray according to the emission profile of scene emitters
      *
      * This function combines both steps of choosing a ray origin on a light
@@ -384,6 +407,51 @@ public:
                              const Point2f &sample,
                              bool test_visibility = true,
                              Mask active = true) const;
+    
+    /**
+     * \brief Direct importance sampling routine
+     *
+     * This method implements stochastic connections to sensors, which is
+     * variously known as <em>sensor sampling</em>, <em>direct importance
+     * sampling</em>, or <em>next event estimation</em>.
+     *
+     * The function expects a 3D reference location \c ref as input, which may
+     * influence the sampling process. Normally, this would be the location of
+     * a surface position being shaded. Ideally, the implementation of this
+     * function should then draw samples proportional to the scene's sensor
+     * profile and the inverse square distance between the reference point and
+     * the sampled sensor position. However, approximations are acceptable as
+     * long as these are reflected in the returned Monte Carlo sampling weight.
+     *
+     * \param ref
+     *    A 3D reference location within the scene, which may influence the
+     *    sampling process.
+     *
+     * \param sample
+     *    A uniformly distributed 2D random variate
+     *
+     * \param test_visibility
+     *    When set to \c true, a shadow ray will be cast to ensure that the
+     *    sampled sensor position and the reference point are mutually visible.
+     *
+     * \return
+     *    A tuple <tt>(ds, spec)</tt> where
+     *    <ul>
+     *      <li>\c ds is a fully populated \ref DirectionSample3f data
+     *          structure, which provides further detail about the sampled
+     *          sensor position (e.g. its surface normal, solid angle density,
+     *          whether Dirac delta distributions were involved, etc.)</li>
+     *      <li>
+     *      <li>\c spec is a Monte Carlo sampling weight specifying the ratio
+     *          of the radiance incident from the emitter and the sample
+     *          probability per unit solid angle.</li>
+     *    </ul>
+     */
+    std::pair<DirectionSample3f, Spectrum>
+    sample_sensor_direction(const Interaction3f &ref,
+                            const Point2f &sample,
+                            bool test_visibility = true,
+                            Mask active = true) const;
 
     /**
      * \brief Evaluate the PDF of direct illumination sampling
@@ -427,9 +495,9 @@ public:
      * \return
      *    The solid angle density of the sample
      */
-     Float pdf_sensor_direction(const Interaction3f &ref,
-        const DirectionSample3f &ds,
-        Mask active = true) const;
+    Float pdf_sensor_direction(const Interaction3f &ref,
+                               const DirectionSample3f &ds,
+                               Mask active = true) const;
 
     /**
      * \brief Re-evaluate the incident direct radiance of the \ref
@@ -462,6 +530,40 @@ public:
      *    sample.
      */
     Spectrum eval_emitter_direction(const Interaction3f &ref,
+                                    const DirectionSample3f &ds,
+                                    Mask active = true) const;
+
+    /**
+     * \brief Re-evaluate the incident direct radiance of the \ref
+     * sample_sensor_direction() method.
+     *
+     * This function re-evaluates the incident direct radiance and sample
+     * probability due to the sensor *so that division by * <tt>ds.pdf</tt>
+     * equals the sampling weight returned by \ref sample_sensor_direction().
+     * This may appear redundant, and indeed such a function would not find use
+     * in "normal" rendering algorithms.
+     *
+     * However, the ability to re-evaluate the contribution of a direct
+     * importance sample is important for differentiable rendering. For
+     * example, we might want to track derivatives in the sampled direction
+     * (<tt>ds.d</tt>) without also differentiating the sampling technique.
+     *
+     * In contrast to \ref pdf_sensor_direction(), evaluating this function can
+     * yield a nonzero result in the case of sensor profiles containing a
+     * Dirac delta term (e.g. point or directional lights).
+     *
+     * \param ref
+     *    A 3D reference location within the scene, which may influence the
+     *    sampling process.
+     *
+     * \param ds
+     *    A direction sampling record, which specifies the query location.
+     *
+     * \return
+     *    The incident radiance and discrete or solid angle density of the
+     *    sample.
+     */
+    Spectrum eval_sensor_direction(const Interaction3f &ref,
                                     const DirectionSample3f &ds,
                                     Mask active = true) const;
 
@@ -652,6 +754,7 @@ protected:
     ref<Emitter> m_environment;
 
     ScalarFloat m_emitter_pmf;
+    ScalarFloat m_sensor_pmf;
     std::unique_ptr<DiscreteDistribution<Float>> m_emitter_distr = nullptr;
 
     std::vector<ref<Shape>> m_silhouette_shapes;

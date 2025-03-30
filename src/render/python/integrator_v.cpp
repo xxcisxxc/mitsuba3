@@ -154,6 +154,9 @@ public:
     std::string to_string() const override {
         NB_OVERRIDE(to_string);
     }
+
+    using AdjointIntegrator::m_max_depth;
+    using AdjointIntegrator::m_rr_depth;
 };
 
 /**
@@ -416,6 +419,8 @@ MI_PY_EXPORT(Integrator) {
             },
             "scene"_a, "params"_a, "grad_in"_a, "sensor"_a = 0, "seed"_a = 0,
             "spp"_a = 0)
+        .def_rw("max_depth", &PyAdjointIntegrator::m_max_depth)
+        .def_rw("rr_depth", &PyAdjointIntegrator::m_rr_depth)
         .def_method(AdjointIntegrator, sample, "scene"_a, "sensor"_a,
                     "sampler"_a, "block"_a, "sample_scale"_a);
 }

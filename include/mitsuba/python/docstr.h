@@ -2237,6 +2237,14 @@ choosing one of several objects (shapes, emitters, ..) on which the
 position lies. In that case, the ``object`` attribute stores a pointer
 to this object.)doc";
 
+static const char *__doc_mitsuba_DirectionSample_sensor =
+R"doc(Optional: pointer to an associated object
+
+In some uses of this record, sampling a position also involves
+choosing one of several objects (shapes, emitters, ..) on which the
+position lies. In that case, the ``object`` attribute stores a pointer
+to this object.)doc";
+
 static const char *__doc_mitsuba_DirectionSample_fields = R"doc()doc";
 
 static const char *__doc_mitsuba_DirectionSample_fields_2 = R"doc()doc";
@@ -6946,6 +6954,36 @@ Returns:
     The incident radiance and discrete or solid angle density of the
     sample.)doc";
 
+static const char *__doc_mitsuba_Scene_eval_sensor_direction =
+R"doc(Re-evaluate the incident direct radiance of the
+sample_sensor_direction() method.
+
+This function re-evaluates the incident direct radiance and sample
+probability due to the sensor *so that division by * ``ds.pdf``
+equals the sampling weight returned by sample_sensor_direction().
+This may appear redundant, and indeed such a function would not find
+use in "normal" rendering algorithms.
+
+However, the ability to re-evaluate the contribution of a direct
+importance sample is important for differentiable rendering. For
+example, we might want to track derivatives in the sampled direction
+(``ds.d``) without also differentiating the sampling technique.
+
+In contrast to pdf_sensor_direction(), evaluating this function can
+yield a nonzero result in the case of emission profiles containing a
+Dirac delta term (e.g. point or directional lights).
+
+Parameter ``ref``:
+    A 3D reference location within the scene, which may influence the
+    sampling process.
+
+Parameter ``ds``:
+    A direction sampling record, which specifies the query location.
+
+Returns:
+    The incident radiance and discrete or solid angle density of the
+    sample.)doc";
+
 static const char *__doc_mitsuba_Scene_integrator = R"doc(Return the scene's integrator)doc";
 
 static const char *__doc_mitsuba_Scene_integrator_2 = R"doc(Return the scene's integrator)doc";
@@ -7005,6 +7043,10 @@ static const char *__doc_mitsuba_Scene_parameters_changed = R"doc(Update interna
 static const char *__doc_mitsuba_Scene_pdf_emitter =
 R"doc(Evaluate the discrete probability of the sample_emitter() technique
 for the given a emitter index.)doc";
+
+static const char *__doc_mitsuba_Scene_pdf_sensor =
+R"doc(Evaluate the discrete probability of the sample_sensor() technique
+for the given a sensor index.)doc";
 
 static const char *__doc_mitsuba_Scene_pdf_emitter_direction =
 R"doc(Evaluate the PDF of direct illumination sampling
@@ -7278,6 +7320,21 @@ Returns:
     (equal to the inverse PDF), and the transformed random sample for
     reuse.)doc";
 
+static const char *__doc_mitsuba_Scene_sample_sensor =
+R"doc(Sample one sensor in the scene and rescale the input sample for
+reuse.
+
+Currently, the sampling scheme implemented by the Scene class is very
+simplistic (uniform).
+
+Parameter ``sample``:
+    A uniformly distributed number in [0, 1).
+
+Returns:
+    The index of the chosen sensor along with the sampling weight
+    (equal to the inverse PDF), and the transformed random sample for
+    reuse.)doc";
+
 static const char *__doc_mitsuba_Scene_sample_emitter_direction =
 R"doc(Direct illumination sampling routine
 
@@ -7311,6 +7368,48 @@ Returns:
 
 * ``ds`` is a fully populated DirectionSample3f data structure, which
 provides further detail about the sampled emitter position (e.g. its
+surface normal, solid angle density, whether Dirac delta distributions
+were involved, etc.)
+
+*
+
+* ``spec`` is a Monte Carlo sampling weight specifying the ratio of
+the radiance incident from the emitter and the sample probability per
+unit solid angle.)doc";
+
+static const char *__doc_mitsuba_Scene_sample_sensor_direction =
+R"doc(Direct importance sampling routine
+
+This method implements stochastic connections to sensors, which is
+variously known as *sensor sampling*, *direct importance sampling*,
+or *next event estimation*.
+
+The function expects a 3D reference location ``ref`` as input, which
+may influence the sampling process. Normally, this would be the
+location of a surface position being shaded. Ideally, the
+implementation of this function should then draw samples proportional
+to the scene's sensor profile and the inverse square distance
+between the reference point and the sampled sensor position. However,
+approximations are acceptable as long as these are reflected in the
+returned Monte Carlo sampling weight.
+
+Parameter ``ref``:
+    A 3D reference location within the scene, which may influence the
+    sampling process.
+
+Parameter ``sample``:
+    A uniformly distributed 2D random variate
+
+Parameter ``test_visibility``:
+    When set to ``True``, a shadow ray will be cast to ensure that the
+    sampled sensor position and the reference point are mutually
+    visible.
+
+Returns:
+    A tuple ``(ds, spec)`` where
+
+* ``ds`` is a fully populated DirectionSample3f data structure, which
+provides further detail about the sampled sensor position (e.g. its
 surface normal, solid angle density, whether Dirac delta distributions
 were involved, etc.)
 
