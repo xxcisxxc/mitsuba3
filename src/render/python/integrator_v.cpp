@@ -272,12 +272,119 @@ public:
     using Base::m_hide_emitters;
 };
 
+/**
+ * \brief Abstract integrator that should **exclusively** be used to trampoline
+ * Python AD-Adjoint integrators for primal renderings
+ */
+template <typename Float, typename Spectrum>
+class ADAdjIntegrator
+    : public AdjointIntegrator<Float, Spectrum> {
+public:
+    ~ADAdjIntegrator() {}
+
+protected:
+    MI_IMPORT_BASE(AdjointIntegrator)
+ 
+    ADAdjIntegrator(const Properties &props) : Base(props) {}
+ 
+    MI_DECLARE_CLASS()
+};
+ 
+MI_IMPLEMENT_CLASS_VARIANT(ADAdjIntegrator, AdjointIntegrator)
+ 
+template class ADAdjIntegrator<MI_VARIANT_FLOAT, MI_VARIANT_SPECTRUM>;
+
+MI_VARIANT class PyADAdjIntegrator : public ADAdjIntegrator<Float, Spectrum> {
+public:
+    MI_IMPORT_TYPES(Scene, Sensor, Sampler, Medium, Emitter, EmitterPtr, BSDF, BSDFPtr, ImageBlock)
+    using Base = ADAdjIntegrator<Float, Spectrum>;
+    NB_TRAMPOLINE(Base, 6);
+
+    PyADAdjIntegrator(const Properties &props) : Base(props) {
+        if constexpr (!dr::is_jit_v<Float>) {
+            Log(Warn, "ADAdjIntegrator Python implementations will have "
+                      "terrible performance in scalar_* modes. It is strongly "
+                      "recommended to switch to a cuda_* or llvm_* mode");
+        }
+    }
+
+    TensorXf render(Scene *scene,
+                    Sensor *sensor,
+                    UInt32 seed,
+                    uint32_t spp,
+                    bool develop,
+                    bool evaluate) override {
+        NB_OVERRIDE(render, scene, sensor, seed, spp, develop, evaluate);
+    }
+
+    TensorXf render_forward(Scene* scene,
+                            void* params,
+                            Sensor *sensor,
+                            UInt32 seed = 0,
+                            uint32_t spp = 0) override {
+        nanobind::detail::ticket nb_ticket(nb_trampoline, "render_forward", false);
+        if (nb_ticket.key.is_valid())
+            return nanobind::cast<TensorXf>(
+                nb_trampoline.base().attr(nb_ticket.key)(
+                    scene, *((nb::object *) params), sensor, seed, spp));
+        else
+            return Base::render_forward(scene, params, sensor, seed, spp);
+    }
+
+    void render_backward(Scene* scene,
+                         void* params,
+                         const TensorXf& grad_in,
+                         Sensor* sensor,
+                         UInt32 seed = 0,
+                         uint32_t spp = 0) override {
+        nanobind::detail::ticket nb_ticket(nb_trampoline, "render_backward", false);
+        if (nb_ticket.key.is_valid())
+            nanobind::cast<void>(nb_trampoline.base().attr(nb_ticket.key)(
+                scene, *((nb::object *) params), grad_in, sensor, seed, spp));
+        else
+            Base::render_backward(scene, params, grad_in, sensor, seed, spp);
+    }
+
+    void sample(const Scene *scene, const Sensor *sensor, Sampler *sampler,
+        ImageBlock *block, ScalarFloat sample_scale) const override {
+        nanobind::detail::ticket nb_ticket(nb_trampoline, "sample", true);
+
+        nb::dict kwargs;
+        kwargs["keyword"] = "value";
+        kwargs["mode"] = drjit::ADMode::Primal;
+        kwargs["scene"] = scene;
+        kwargs["sensor"] = sensor;
+        kwargs["sampler"] = sampler;
+        kwargs["block"] = block;
+        kwargs["sample_scale"] = sample_scale;
+        kwargs["δL"] = nb::none();
+        kwargs["state_in"] = nb::none();
+
+        using PyReturn = std::tuple<Spectrum, nb::object>;
+        auto [spec, state] = nanobind::cast<PyReturn>(
+            nb_trampoline.base().attr(nb_ticket.key)(**kwargs));
+    }
+
+    std::vector<std::string> aov_names() const override {
+        NB_OVERRIDE(aov_names);
+    }
+
+    std::string to_string() const override {
+        NB_OVERRIDE(to_string);
+    }
+
+    using Base::m_max_depth;
+    using Base::m_rr_depth;
+};
+
 MI_PY_EXPORT(Integrator) {
     MI_PY_IMPORT_TYPES()
     using PySamplingIntegrator = PySamplingIntegrator<Float, Spectrum>;
     using PyAdjointIntegrator = PyAdjointIntegrator<Float, Spectrum>;
     using CppADIntegrator = CppADIntegrator<Float, Spectrum>;
     using PyADIntegrator = PyADIntegrator<Float, Spectrum>;
+    using ADAdjIntegrator = ADAdjIntegrator<Float, Spectrum>;
+    using PyADAdjIntegrator = PyADAdjIntegrator<Float, Spectrum>;
     using Properties = PropertiesV<Float>;
 
     MI_PY_CLASS(Integrator, Object)
@@ -423,4 +530,8 @@ MI_PY_EXPORT(Integrator) {
         .def_rw("rr_depth", &PyAdjointIntegrator::m_rr_depth)
         .def_method(AdjointIntegrator, sample, "scene"_a, "sensor"_a,
                     "sampler"_a, "block"_a, "sample_scale"_a);
+
+    nb::class_<ADAdjIntegrator, AdjointIntegrator, PyADAdjIntegrator>(
+        m, "ADAdjIntegrator")
+        .def(nb::init<const Properties &>());
 }
