@@ -36,11 +36,18 @@ public:
     Null(const Properties &props) : Base(props) {
         m_components.push_back(BSDFFlags::Null | BSDFFlags::FrontSide | BSDFFlags::BackSide);
         m_flags = m_components.back();
-        m_attenuation = props.get("attenuation", 0.f);
+        m_attenuation = dr::opaque<Float>(props.get<ScalarFloat>("attenuation", 0.f));
     }
 
     void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("attenuation", m_attenuation, +ParamFlags::NonDifferentiable);
+        callback->put_parameter("attenuation", m_attenuation, +ParamFlags::Differentiable);
+    }
+
+    void parameters_changed(const std::vector<std::string> &keys) override {
+        if (keys.empty() || string::contains(keys, "attenuation")) {
+            dr::make_opaque(m_attenuation);
+        }
+        Base::parameters_changed(keys);
     }
 
     std::pair<BSDFSample3f, Spectrum> sample(const BSDFContext &ctx,
@@ -73,15 +80,32 @@ public:
         return { bs, result };
     }
 
-    Spectrum eval(const BSDFContext & /*ctx*/,
-                  const SurfaceInteraction3f & /*si*/, const Vector3f & /*wo*/,
-                  Mask /*active*/) const override {
-        return 0.f;
+    Spectrum eval(const BSDFContext & ctx,
+                  const SurfaceInteraction3f & si, const Vector3f & wo,
+                  Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::BSDFEvaluate, active);
+
+        bool sample_transmission = ctx.is_enabled(BSDFFlags::Null, 0);
+        Spectrum result(0.f);
+        if (sample_transmission) {
+            Float cos_theta_i = Frame3f::cos_theta(si.wi);
+            Float attnu = dr::select(active && (cos_theta_i < 0.f) && (dr::max(wo + si.wi) == 0), m_attenuation, 0.f);
+            result               = dr::exp(-attnu * si.t);
+        }
+        return result;
     }
 
-    Float pdf(const BSDFContext & /*ctx*/, const SurfaceInteraction3f & /*si*/,
-              const Vector3f & /*wo*/, Mask /*active*/) const override {
-        return 0.f;
+    Float pdf(const BSDFContext & ctx, const SurfaceInteraction3f & si,
+              const Vector3f & wo, Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::BSDFEvaluate, active);
+
+        bool sample_transmission = ctx.is_enabled(BSDFFlags::Null, 0);
+        Float result_pdf(0.f);
+        if (sample_transmission) {
+            Float cos_theta_i = Frame3f::cos_theta(si.wi);
+            result_pdf = dr::select(active && (cos_theta_i < 0.f) && (dr::max(wo + si.wi) == 0), 1.f, 0.f);
+        }
+        return result_pdf;
     }
 
     Spectrum eval_null_transmission(const SurfaceInteraction3f & /*si*/,
